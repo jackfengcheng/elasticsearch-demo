@@ -20,6 +20,8 @@ import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.aggregations.Aggregation;
 import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
+import org.elasticsearch.search.aggregations.bucket.terms.Terms;
+import org.elasticsearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.avg.Avg;
 import org.elasticsearch.search.aggregations.metrics.cardinality.Cardinality;
 import org.elasticsearch.search.aggregations.metrics.max.Max;
@@ -207,7 +209,7 @@ public class TestController {
         for (SearchHit hit:hits) {
             sourceAsMap = hit.getSourceAsMap();
         }
-        return new ApiResponse(200,"OK");
+        return new ApiResponse(200,"OK",sourceAsMap);
     }
 
     /**
@@ -226,7 +228,7 @@ public class TestController {
         for (SearchHit hit:hits) {
             sourceAsMap = hit.getSourceAsMap();
         }
-        return new ApiResponse(200,"OK");
+        return new ApiResponse(200,"OK",sourceAsMap);
     }
 
 
@@ -242,20 +244,16 @@ public class TestController {
         for (SearchHit hit:hits) {
             sourceAsMap = hit.getSourceAsMap();
         }
-        return new ApiResponse(200,"OK");
+        return new ApiResponse(200,"OK",sourceAsMap);
     }
 
     /**
      * 综合查询
-     * @param startdate 查询条件
-     * @param enddate 查询条件
      * @param title 查询条件
      * @return Object
      */
     @GetMapping("book/novel/querySearch")
-    public  ApiResponse rangeSearch(@RequestParam(name = "startdate") String startdate,
-                                    @RequestParam(name = "enddate") String enddate,
-                                    @RequestParam(name = "title") String title){
+    public  ApiResponse rangeSearch(@RequestParam(name = "title") String title){
         Map<String, Object> sourceAsMap =null;
         //范围查询
         //QueryBuilder queryBuilder = QueryBuilders.rangeQuery("birthday").format(startdate).to(enddate);
@@ -276,7 +274,7 @@ public class TestController {
         for (SearchHit hit:hits) {
             sourceAsMap = hit.getSourceAsMap();
         }
-        return new ApiResponse(200,"OK");
+        return new ApiResponse(200,"OK",sourceAsMap);
     }
 
     @GetMapping("book/novel/aggSearch")
@@ -333,5 +331,113 @@ public class TestController {
             sourceAsMap = hit.getSourceAsMap();
         }
         return  new ApiResponse(200,"OK",sourceAsMap);
+    }
+
+    /**
+     * 组合查询 boolQuery
+     * @return Object
+     */
+    @GetMapping("book/novel/boolQuery")
+    public ApiResponse boolSQuery(){
+        Map<String, Object> sourceAsMap =null;
+        QueryBuilder queryBuilder = QueryBuilders.boolQuery()
+                .must(QueryBuilders.matchQuery("name","fengcheng"))
+                .mustNot(QueryBuilders.matchQuery("title","车祸"))
+                .should(QueryBuilders.matchQuery("author","lisi"))
+                .filter(QueryBuilders.rangeQuery("birthday")
+                        .from("1992-01-01").to("2018-01-01"));
+
+        SearchResponse response = this.client.prepareSearch("lib3").setQuery(queryBuilder).setSize(20).get();
+        SearchHits hits = response.getHits();
+        for (SearchHit hit : hits) {
+             sourceAsMap = hit.getSourceAsMap();
+        }
+        return new ApiResponse(200,"OK",sourceAsMap);
+    }
+
+    /**
+     * 组合查询，不计算相关度分数的查询
+     * @return Object
+     */
+    @GetMapping("book/novel/conScrollSQuery")
+    public ApiResponse conScrollSQuery(){
+        Map<String, Object> sourceAsMap =null;
+        QueryBuilder queryBuilder = QueryBuilders.constantScoreQuery(QueryBuilders.termsQuery("name","zhsangsan"));
+
+        SearchResponse response = this.client.prepareSearch("lib3").setQuery(queryBuilder).setSize(20).get();
+        SearchHits hits = response.getHits();
+        for (SearchHit hit : hits) {
+            sourceAsMap = hit.getSourceAsMap();
+        }
+        return new ApiResponse(200,"OK",sourceAsMap);
+    }
+
+    /**
+     * 分组聚合
+     * @return Onject
+     */
+    @GetMapping("book/novel/term")
+    public  ApiResponse term(){
+        TermsAggregationBuilder field = AggregationBuilders.terms("terms").field("age");
+        SearchResponse response = client.prepareSearch("lib3").addAggregation(field).execute().actionGet();
+        Terms terms = response.getAggregations().get("terms");
+        for (Terms.Bucket term : terms.getBuckets()) {
+            return new ApiResponse(200,"OK",term);
+        }
+        return new ApiResponse(200,"OK");
+    }
+
+    /**
+     * 过滤聚合
+     */
+    @GetMapping("book/novel/term")
+    public  ApiResponse filter(){
+        Map<String, Object> sourceAsMap =null;
+        QueryBuilder queryBuilder = QueryBuilders.termsQuery("name","张三");
+        AggregationBuilder agg = AggregationBuilders.filter("filter",queryBuilder);
+        SearchResponse response = this.client.prepareSearch("lib3").addAggregation(agg).execute().actionGet();
+        SearchHits hits = response.getHits();
+        for (SearchHit hit :
+                hits) {
+            sourceAsMap= hit.getSourceAsMap();
+        }
+        return new ApiResponse(200,"OK",sourceAsMap);
+    }
+
+    /**
+     * 范围聚合
+     * @return Object
+     */
+    @GetMapping("book/novel/range")
+    public  ApiResponse range(){
+        Map<String, Object> sourceAsMap =null;
+        AggregationBuilder agg = AggregationBuilders.range("range")
+                .field("age")
+                .addUnboundedFrom(20)
+                .addRange(20,50)
+                .addUnboundedTo(50);
+        SearchResponse response = this.client.prepareSearch("lib3").addAggregation(agg).execute().actionGet();
+        SearchHits hits = response.getHits();
+        for (SearchHit hit :hits ) {
+            sourceAsMap= hit.getSourceAsMap();
+        }
+        return new ApiResponse(200,"OK",sourceAsMap);
+    }
+
+    /**
+     * 为空聚合
+     * @return Object
+     */
+    @GetMapping("book/novel/missing")
+    public  ApiResponse missing(){
+        Map<String, Object> sourceAsMap =null;
+        AggregationBuilder agg =AggregationBuilders.missing("missing").field("price");
+        SearchResponse response = this.client.prepareSearch("lib3").addAggregation(agg).execute().actionGet();
+        SearchHits hits = response.getHits();
+        for (SearchHit hit :
+                hits) {
+             sourceAsMap = hit.getSourceAsMap();
+        }
+        return new ApiResponse(200,"OK",sourceAsMap);
     }
 }
