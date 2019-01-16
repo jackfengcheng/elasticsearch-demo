@@ -8,9 +8,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Date;
 
-/**
- * Created by admini on 2019/1/16.
- */
 @RestController
 @RequestMapping("userindex/user")
 public class UserController {
